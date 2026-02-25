@@ -8,7 +8,7 @@
 // ⚠️ CAMBIA ESTA URL por la de tu nuevo Google Sheet
 // Para obtener la URL: publica el sheet (Archivo → Compartir → Publicar en la web → CSV)
 // Luego pega la URL aquí. Si usas la hoja ROSTER, agrega gid= con el ID de esa hoja.
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTXzeKdoXCwEJhCWDE3w83oUZ1Jins--ZwZf70XgaEM1P-YCv-5dD0P1B1absEak77--NXtEO7nTvIt/pub?gid=1760039021&single=true&output=csv';
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTXzeKdoXCwEJhCWDE3w83oUZ1Jins--ZwZf70XgaEM1P-YCv-5dD0P1B1absEak77--NXtEO7nTvIt/pubhtml';
 
 // Codificación de operaciones — misma que en el Apps Script
 // Para agregar nueva operación: solo agregar aquí + en el Apps Script
@@ -853,3 +853,4 @@ function populateSelectors() {
     const calMonth = document.getElementById('calendarMonth');
     calMonth.innerHTML = '<option value="">— Seleccionar mes —</option>' + monthOptions;
 }
+
