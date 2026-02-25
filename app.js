@@ -8,7 +8,7 @@
 // ⚠️ CAMBIA ESTA URL por la de tu nuevo Google Sheet
 // Para obtener la URL: publica el sheet (Archivo → Compartir → Publicar en la web → CSV)
 // Luego pega la URL aquí. Si usas la hoja ROSTER, agrega gid= con el ID de esa hoja.
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/126OGyfZNK_J-vaKrnaGuo9ByZ_I-8yvb/gviz/tq?tqx=out:csv&gid=400468362';
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTXzeKdoXCwEJhCWDE3w83oUZ1Jins--ZwZf70XgaEM1P-YCv-5dD0P1B1absEak77--NXtEO7nTvIt/pub?gid=1760039021&single=true&output=csv';
 
 // Codificación de operaciones — misma que en el Apps Script
 // Para agregar nueva operación: solo agregar aquí + en el Apps Script
@@ -89,26 +89,55 @@ document.addEventListener('DOMContentLoaded', async () => {
 // =============================================
 // 📡 FETCH & PARSE DATA
 // =============================================
+
+// Mapeo de nombres de mes (como aparecen en la fila 2 del sheet) a índice 0-11
+const MONTH_MAP = {
+    'ENERO': 0, 'FEBRERO': 1, 'MARZO': 2, 'ABRIL': 3,
+    'MAYO': 4, 'JUNIO': 5, 'JULIO': 6, 'AGOSTO': 7,
+    'SETIEMBRE': 8, 'SEPTIEMBRE': 8, 'OCTUBRE': 9,
+    'NOVIEMBRE': 10, 'DICIEMBRE': 11
+};
+
 async function loadData() {
     const response = await fetch(SHEET_URL);
     const text = await response.text();
 
     const rows = parseCSV(text);
-    if (rows.length < 3) throw new Error('No se encontraron datos suficientes');
+    if (rows.length < 6) throw new Error('No se encontraron datos suficientes');
 
-    // Row 0: Month headers (ABRIL, MAYO, etc.)
-    // Row 1: Date headers (1/4/2025, 2/4/2025, etc.)
-    // Row 2: Sub-header (Observacion, etc.)
-    // Row 3+: Driver data
+    // ── Estructura del nuevo Google Sheet ──
+    // Row 0: Título ("🚛 MISAGI", "", "ROSTER DE SEGUIMIENTO...")
+    // Row 1: Subtítulo ("Tracking", "", "Control de Asistencia...")
+    // Row 2: Meses ("" , "", "ENERO",,,,..."FEBRERO",,,...)
+    // Row 3: Encabezados ("CONDUCTOR", "CARGO", 1, 2, 3, ... 31, 1, 2, ...)
+    // Row 4: Días semana ("", "", "J", "V", "S", "D", ...)
+    // Row 5+: Datos de conductores
 
-    const dateRow = rows[1];
+    const monthRow = rows[2];   // nombres de meses
+    const dayNumRow = rows[3];  // números de día (1-31)
     const dates = [];
 
-    for (let i = 2; i < dateRow.length; i++) {
-        const dateStr = dateRow[i].trim();
-        if (dateStr) {
-            const parsed = parseDate(dateStr);
-            dates.push({ col: i, date: parsed, str: dateStr });
+    // Expandir los meses (las celdas merged aparecen vacías después del nombre)
+    let currentMonth = -1;
+    const monthPerCol = [];
+    for (let i = 2; i < monthRow.length; i++) {
+        const mesStr = monthRow[i].trim().toUpperCase();
+        if (mesStr && MONTH_MAP[mesStr] !== undefined) {
+            currentMonth = MONTH_MAP[mesStr];
+        }
+        monthPerCol.push(currentMonth);
+    }
+
+    // Construir fecha para cada columna de datos
+    const DATA_YEAR = 2026;  // Año definido en el sheet
+    for (let i = 2; i < dayNumRow.length; i++) {
+        const dayStr = dayNumRow[i].trim();
+        const dayNum = parseInt(dayStr);
+        const mesIdx = monthPerCol[i - 2];
+
+        if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31 && mesIdx >= 0) {
+            const date = new Date(DATA_YEAR, mesIdx, dayNum);
+            dates.push({ col: i, date: date, str: `${dayNum}/${mesIdx + 1}/${DATA_YEAR}` });
         } else {
             dates.push({ col: i, date: null, str: '' });
         }
@@ -116,18 +145,16 @@ async function loadData() {
 
     globalData.dates = dates;
 
-    // Parse drivers dynamically
+    // Parse drivers — empiezan en fila 5 (índice 5)
     const drivers = [];
-    for (let r = 3; r < rows.length; r++) {
+    for (let r = 5; r < rows.length; r++) {
         const name = rows[r][0].trim();
         if (!name) continue;
-        // Check if it's actually a driver name (not a legend row)
-        // Legend rows typically don't have codes in the first few data columns
-        // A real driver row should have multiple recognized codes
 
+        // Filtrar filas de leyenda o vacías
         let codeCount = 0;
         let totalNonEmpty = 0;
-        for (let c = 2; c < Math.min(rows[r].length, 50); c++) {
+        for (let c = 2; c < Math.min(rows[r].length, 60); c++) {
             const v = rows[r][c].trim();
             if (v) {
                 totalNonEmpty++;
@@ -135,9 +162,9 @@ async function loadData() {
             }
         }
 
-        // If less than 30% of non-empty cells are codes, it's likely a legend/helper row
+        // Si menos del 30% son códigos válidos, es leyenda/helper
         if (totalNonEmpty > 0 && codeCount / totalNonEmpty < 0.3) continue;
-        if (totalNonEmpty < 5) continue; // Very few entries, skip
+        if (totalNonEmpty < 5) continue;
 
         const records = [];
         for (let c = 2; c < rows[r].length; c++) {
@@ -158,7 +185,7 @@ async function loadData() {
 
     globalData.drivers = drivers;
 
-    // Extract unique months
+    // Extraer meses únicos
     const monthSet = new Set();
     for (const d of dates) {
         if (d.date) {
@@ -167,20 +194,6 @@ async function loadData() {
         }
     }
     globalData.months = [...monthSet].sort();
-}
-
-function parseDate(str) {
-    // Handle d/m/yyyy format
-    const parts = str.split('/');
-    if (parts.length === 3) {
-        const d = parseInt(parts[0]);
-        const m = parseInt(parts[1]) - 1;
-        const y = parseInt(parts[2]);
-        if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
-            return new Date(y, m, d);
-        }
-    }
-    return null;
 }
 
 function parseCSV(text) {
