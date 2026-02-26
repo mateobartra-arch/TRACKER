@@ -108,7 +108,7 @@ async function loadData() {
     // ── Estructura del nuevo Google Sheet ──
     // Row 0: Título ("🚛 MISAGI", "", "ROSTER DE SEGUIMIENTO...")
     // Row 1: Subtítulo ("Tracking", "", "Control de Asistencia...")
-    // Row 2: Meses ("" , "", "ENERO",,,,..."FEBRERO",,,...)
+    // Row 2: Meses ("" , "", "ENERO",,,,...,"FEBRERO",,,,...)
     // Row 3: Encabezados ("CONDUCTOR", "CARGO", 1, 2, 3, ... 31, 1, 2, ...)
     // Row 4: Días semana ("", "", "J", "V", "S", "D", ...)
     // Row 5+: Datos de conductores
@@ -137,7 +137,7 @@ async function loadData() {
 
         if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31 && mesIdx >= 0) {
             const date = new Date(DATA_YEAR, mesIdx, dayNum);
-            dates.push({ col: i, date: date, str: `${dayNum}/${mesIdx + 1}/${DATA_YEAR}` });
+            dates.push({ col: i, date: date, str: dayNum + '/' + (mesIdx + 1) + '/' + DATA_YEAR });
         } else {
             dates.push({ col: i, date: null, str: '' });
         }
@@ -180,7 +180,7 @@ async function loadData() {
             });
         }
 
-        drivers.push({ name, records });
+        drivers.push({ name: name, records: records });
     }
 
     globalData.drivers = drivers;
@@ -189,11 +189,11 @@ async function loadData() {
     const monthSet = new Set();
     for (const d of dates) {
         if (d.date) {
-            const key = `${d.date.getFullYear()}-${String(d.date.getMonth()).padStart(2, '0')}`;
+            const key = d.date.getFullYear() + '-' + String(d.date.getMonth()).padStart(2, '0');
             monthSet.add(key);
         }
     }
-    globalData.months = [...monthSet].sort();
+    globalData.months = Array.from(monthSet).sort();
 }
 
 function parseCSV(text) {
@@ -252,8 +252,8 @@ function lookupCode(val) {
     const v = val.trim();
     if (OPERATION_CODES[v]) return OPERATION_CODES[v];
     const upper = v.toUpperCase();
-    for (const [key, info] of Object.entries(OPERATION_CODES)) {
-        if (key.toUpperCase() === upper) return info;
+    for (const key in OPERATION_CODES) {
+        if (key.toUpperCase() === upper) return OPERATION_CODES[key];
     }
     return null;
 }
@@ -284,7 +284,7 @@ function renderKPIs() {
         for (const rec of driver.records) {
             if (!rec.date || !rec.code) continue;
             const group = rec.code.group;
-            if (!['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].includes(group)) {
+            if (['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].indexOf(group) === -1) {
                 totalWorkDays++;
                 opCounts[group] = (opCounts[group] || 0) + 1;
             } else if (group === 'DESCANSO') {
@@ -296,7 +296,10 @@ function renderKPIs() {
     }
 
     // Most frequent operation
-    const topOp = Object.entries(opCounts).sort((a, b) => b[1] - a[1])[0];
+    var opEntries = [];
+    for (var k in opCounts) { opEntries.push([k, opCounts[k]]); }
+    opEntries.sort(function (a, b) { return b[1] - a[1]; });
+    const topOp = opEntries[0];
 
     const kpiData = [
         { icon: '👥', value: drivers.length, label: 'Conductores' },
@@ -308,19 +311,14 @@ function renderKPIs() {
     ];
 
     const container = document.getElementById('kpiRow');
-    container.innerHTML = kpiData.map(kpi => `
-    <div class="kpi-card">
-      <div class="kpi-icon">${kpi.icon}</div>
-      <div class="kpi-value">${kpi.value}</div>
-      <div class="kpi-label">${kpi.label}</div>
-    </div>
-  `).join('');
+    container.innerHTML = kpiData.map(function (kpi) { return '<div class="kpi-card"><div class="kpi-icon">' + kpi.icon + '</div><div class="kpi-value">' + kpi.value + '</div><div class="kpi-label">' + kpi.label + '</div></div>'; }).join('');
 }
 
 function getOperationGroups() {
     const groups = {};
-    for (const [code, info] of Object.entries(OPERATION_CODES)) {
-        if (!['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].includes(info.group)) {
+    for (const code in OPERATION_CODES) {
+        const info = OPERATION_CODES[code];
+        if (['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].indexOf(info.group) === -1) {
             groups[info.group] = info;
         }
     }
@@ -339,12 +337,7 @@ function renderLegend() {
         { color: '#C0C0C0', label: 'Feriado' }
     ];
 
-    const html = legendItems.map(item => `
-    <div class="legend-item">
-      <div class="legend-color" style="background:${item.color}"></div>
-      ${item.label}
-    </div>
-  `).join('');
+    const html = legendItems.map(function (item) { return '<div class="legend-item"><div class="legend-color" style="background:' + item.color + '"></div>' + item.label + '</div>'; }).join('');
 
     document.getElementById('legend').innerHTML = html;
     const calLegend = document.getElementById('calendarLegend');
@@ -355,11 +348,11 @@ function renderDriverCards() {
     const container = document.getElementById('driverGrid');
     const avatarColors = ['#7c3aed', '#2563eb', '#ea580c', '#10b981', '#ef4444', '#fbbf24', '#06b6d4', '#8b5cf6'];
 
-    container.innerHTML = globalData.drivers.map((driver, idx) => {
+    container.innerHTML = globalData.drivers.map(function (driver, idx) {
         const stats = getDriverStats(driver);
         const lastOp = getLastOperation(driver);
         const color = avatarColors[idx % avatarColors.length];
-        const initials = driver.name.split(' ').map(w => w[0]).join('').substring(0, 2);
+        const initials = driver.name.split(' ').map(function (w) { return w[0]; }).join('').substring(0, 2);
 
         // Build mini bar
         const total = stats.worked + stats.rest + stats.stopped;
@@ -367,40 +360,37 @@ function renderDriverCards() {
         const pctRest = total > 0 ? (stats.rest / total * 100) : 0;
         const pctStop = total > 0 ? (stats.stopped / total * 100) : 0;
 
-        return `
-      <div class="driver-card" onclick="showPage('conductores'); 
-        document.getElementById('selectDriver').value='${idx}'; showDriverDetail();">
-        <div class="driver-header">
-          <div class="driver-avatar" style="background:${color}">${initials}</div>
-          <div>
-            <div class="driver-name">${driver.name}</div>
-            <div class="driver-status" style="color:${lastOp.color}">
-              <span class="dot" style="background:${lastOp.color}"></span>
-              ${lastOp.label}
-            </div>
-          </div>
-        </div>
-        <div class="driver-stats">
-          <div class="stat-item">
-            <div class="stat-value" style="color:${lastOp.color}">${stats.worked}</div>
-            <div class="stat-label">Trabajados</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value" style="color:#374151">${stats.rest}</div>
-            <div class="stat-label">Descanso</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-value" style="color:#fbbf24">${stats.stopped}</div>
-            <div class="stat-label">Parado</div>
-          </div>
-        </div>
-        <div class="mini-bar">
-          <div class="segment" style="width:${pctWork}%; background:${lastOp.color}"></div>
-          <div class="segment" style="width:${pctRest}%; background:#374151"></div>
-          <div class="segment" style="width:${pctStop}%; background:#fbbf24"></div>
-        </div>
-      </div>
-    `;
+        return '<div class="driver-card" onclick="showPage(\'conductores\'); document.getElementById(\'selectDriver\').value=\'' + idx + '\'; showDriverDetail();">' +
+            '<div class="driver-header">' +
+            '<div class="driver-avatar" style="background:' + color + '">' + initials + '</div>' +
+            '<div>' +
+            '<div class="driver-name">' + driver.name + '</div>' +
+            '<div class="driver-status" style="color:' + lastOp.color + '">' +
+            '<span class="dot" style="background:' + lastOp.color + '"></span>' +
+            lastOp.label +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '<div class="driver-stats">' +
+            '<div class="stat-item">' +
+            '<div class="stat-value" style="color:' + lastOp.color + '">' + stats.worked + '</div>' +
+            '<div class="stat-label">Trabajados</div>' +
+            '</div>' +
+            '<div class="stat-item">' +
+            '<div class="stat-value" style="color:#374151">' + stats.rest + '</div>' +
+            '<div class="stat-label">Descanso</div>' +
+            '</div>' +
+            '<div class="stat-item">' +
+            '<div class="stat-value" style="color:#fbbf24">' + stats.stopped + '</div>' +
+            '<div class="stat-label">Parado</div>' +
+            '</div>' +
+            '</div>' +
+            '<div class="mini-bar">' +
+            '<div class="segment" style="width:' + pctWork + '%; background:' + lastOp.color + '"></div>' +
+            '<div class="segment" style="width:' + pctRest + '%; background:#374151"></div>' +
+            '<div class="segment" style="width:' + pctStop + '%; background:#fbbf24"></div>' +
+            '</div>' +
+            '</div>';
     }).join('');
 }
 
@@ -411,22 +401,22 @@ function getDriverStats(driver) {
     for (const rec of driver.records) {
         if (!rec.code) continue;
         const g = rec.code.group;
-        if (['DESCANSO'].includes(g)) rest++;
-        else if (['PARADO'].includes(g)) stopped++;
-        else if (!['MEDIA', 'FERIADO'].includes(g)) {
+        if (g === 'DESCANSO') rest++;
+        else if (g === 'PARADO') stopped++;
+        else if (g !== 'MEDIA' && g !== 'FERIADO') {
             worked++;
             opCounts[g] = (opCounts[g] || 0) + 1;
         }
     }
 
-    return { worked, rest, stopped, opCounts };
+    return { worked: worked, rest: rest, stopped: stopped, opCounts: opCounts };
 }
 
 function getLastOperation(driver) {
     // Find the last non-empty code
     for (let i = driver.records.length - 1; i >= 0; i--) {
         const rec = driver.records[i];
-        if (rec.code && !['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].includes(rec.code.group)) {
+        if (rec.code && rec.code.group !== 'DESCANSO' && rec.code.group !== 'PARADO' && rec.code.group !== 'MEDIA' && rec.code.group !== 'FERIADO') {
             return {
                 label: rec.code.label + ' (' + rec.rawValue + ')',
                 color: GROUP_COLORS[rec.code.group] || '#6b7280',
@@ -462,7 +452,7 @@ function renderDonutChart() {
         for (const rec of driver.records) {
             if (!rec.code) continue;
             const g = rec.code.group;
-            if (!['DESCANSO', 'PARADO', 'MEDIA', 'FERIADO'].includes(g)) {
+            if (g !== 'DESCANSO' && g !== 'PARADO' && g !== 'MEDIA' && g !== 'FERIADO') {
                 opGroups[g] = (opGroups[g] || 0) + 1;
             }
         }
@@ -470,14 +460,14 @@ function renderDonutChart() {
 
     const labels = Object.keys(opGroups);
     const data = Object.values(opGroups);
-    const colors = labels.map(l => GROUP_COLORS[l] || '#6b7280');
+    const colors = labels.map(function (l) { return GROUP_COLORS[l] || '#6b7280'; });
 
     if (chartDonut) chartDonut.destroy();
     chartDonut = new Chart(document.getElementById('chartDonut'), {
         type: 'doughnut',
         data: {
-            labels,
-            datasets: [{ data, backgroundColor: colors, borderWidth: 0 }]
+            labels: labels,
+            datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
         },
         options: {
             responsive: true,
@@ -493,20 +483,20 @@ function renderDonutChart() {
 }
 
 function renderBarChart() {
-    const labels = globalData.drivers.map(d => {
+    const labels = globalData.drivers.map(function (d) {
         const parts = d.name.split(' ');
         return parts.length > 1 ? parts[parts.length - 1] : parts[0]; // Last name
     });
 
     const opGroupNames = Object.keys(getOperationGroups());
-    const datasets = opGroupNames.map(group => {
-        const data = globalData.drivers.map(driver => {
+    const datasets = opGroupNames.map(function (group) {
+        const data = globalData.drivers.map(function (driver) {
             const stats = getDriverStats(driver);
             return stats.opCounts[group] || 0;
         });
         return {
             label: group,
-            data,
+            data: data,
             backgroundColor: GROUP_COLORS[group] || '#6b7280'
         };
     });
@@ -514,7 +504,7 @@ function renderBarChart() {
     if (chartBar) chartBar.destroy();
     chartBar = new Chart(document.getElementById('chartBar'), {
         type: 'bar',
-        data: { labels, datasets },
+        data: { labels: labels, datasets: datasets },
         options: {
             responsive: true,
             maintainAspectRatio: true,
@@ -559,57 +549,35 @@ function showDriverDetail() {
 
     // Build operation summary
     const opSummary = Object.entries(stats.opCounts)
-        .sort((a, b) => b[1] - a[1])
-        .map(([op, count]) => `<strong>${op}</strong>: ${count} días`)
+        .sort(function (a, b) { return b[1] - a[1]; })
+        .map(function (entry) { return '<strong>' + entry[0] + '</strong>: ' + entry[1] + ' días'; })
         .join(' · ');
 
     // Find comments
-    const comments = driver.records.filter(r => r.isComment && r.rawValue);
+    const comments = driver.records.filter(function (r) { return r.isComment && r.rawValue; });
     const commentHtml = comments.length > 0
-        ? `<p style="margin-top:12px;">📝 <strong>Comentarios encontrados:</strong> ${comments.map(c =>
-            `"${c.rawValue}"${c.date ? ' (' + c.date.toLocaleDateString('es-PE') + ')' : ''}`
-        ).join(', ')}</p>`
+        ? '<p style="margin-top:12px;">📝 <strong>Comentarios encontrados:</strong> ' + comments.map(function (c) {
+            return '"' + c.rawValue + '"' + (c.date ? ' (' + c.date.toLocaleDateString('es-PE') + ')' : '');
+        }).join(', ') + '</p>'
         : '';
 
     const detail = document.getElementById('driverDetail');
-    detail.innerHTML = `
-    <button class="close-btn" onclick="this.parentElement.classList.remove('active');
-      document.getElementById('driverChartCard').style.display='none';">✕</button>
-    <h3>👤 ${driver.name}</h3>
-    
-    <div class="detail-stats-grid">
-      <div class="detail-stat">
-        <div class="val" style="color:${lastOp.color}">${stats.worked}</div>
-        <div class="lbl">Días Trabajados</div>
-      </div>
-      <div class="detail-stat">
-        <div class="val" style="color:#374151">${stats.rest}</div>
-        <div class="lbl">Descanso</div>
-      </div>
-      <div class="detail-stat">
-        <div class="val" style="color:#fbbf24">${stats.stopped}</div>
-        <div class="lbl">Parado</div>
-      </div>
-      <div class="detail-stat">
-        <div class="val" style="color:#00d4ff">${actPct}%</div>
-        <div class="lbl">Actividad</div>
-      </div>
-      <div class="detail-stat">
-        <div class="val" style="color:${lastOp.color}">${lastOp.group}</div>
-        <div class="lbl">Última Operación</div>
-      </div>
-      <div class="detail-stat">
-        <div class="val">${Object.keys(stats.opCounts).length}</div>
-        <div class="lbl">Operaciones</div>
-      </div>
-    </div>
-    
-    <div class="summary-text">
-      <p>📊 <strong>Resumen de operaciones:</strong> ${opSummary || 'Sin datos'}</p>
-      <p style="margin-top:8px;">📈 <strong>Porcentaje de actividad:</strong> ${actPct}% del tiempo registrado fue en operación.</p>
-      ${commentHtml}
-    </div>
-  `;
+    detail.innerHTML =
+        '<button class="close-btn" onclick="this.parentElement.classList.remove(\'active\'); document.getElementById(\'driverChartCard\').style.display=\'none\';">✕</button>' +
+        '<h3>👤 ' + driver.name + '</h3>' +
+        '<div class="detail-stats-grid">' +
+        '<div class="detail-stat"><div class="val" style="color:' + lastOp.color + '">' + stats.worked + '</div><div class="lbl">Días Trabajados</div></div>' +
+        '<div class="detail-stat"><div class="val" style="color:#374151">' + stats.rest + '</div><div class="lbl">Descanso</div></div>' +
+        '<div class="detail-stat"><div class="val" style="color:#fbbf24">' + stats.stopped + '</div><div class="lbl">Parado</div></div>' +
+        '<div class="detail-stat"><div class="val" style="color:#00d4ff">' + actPct + '%</div><div class="lbl">Actividad</div></div>' +
+        '<div class="detail-stat"><div class="val" style="color:' + lastOp.color + '">' + lastOp.group + '</div><div class="lbl">Última Operación</div></div>' +
+        '<div class="detail-stat"><div class="val">' + Object.keys(stats.opCounts).length + '</div><div class="lbl">Operaciones</div></div>' +
+        '</div>' +
+        '<div class="summary-text">' +
+        '<p>📊 <strong>Resumen de operaciones:</strong> ' + (opSummary || 'Sin datos') + '</p>' +
+        '<p style="margin-top:8px;">📈 <strong>Porcentaje de actividad:</strong> ' + actPct + '% del tiempo registrado fue en operación.</p>' +
+        commentHtml +
+        '</div>';
     detail.classList.add('active');
 
     // Render driver-specific chart
@@ -620,7 +588,7 @@ function renderDriverChart(driver) {
     const stats = getDriverStats(driver);
     const labels = Object.keys(stats.opCounts);
     const data = Object.values(stats.opCounts);
-    const colors = labels.map(l => GROUP_COLORS[l] || '#6b7280');
+    const colors = labels.map(function (l) { return GROUP_COLORS[l] || '#6b7280'; });
 
     document.getElementById('driverChartCard').style.display = 'block';
 
@@ -628,8 +596,8 @@ function renderDriverChart(driver) {
     chartDriverDetail = new Chart(document.getElementById('chartDriverDetail'), {
         type: 'doughnut',
         data: {
-            labels,
-            datasets: [{ data, backgroundColor: colors, borderWidth: 0 }]
+            labels: labels,
+            datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
         },
         options: {
             responsive: true,
@@ -655,13 +623,15 @@ function generateReport() {
         return;
     }
 
-    const [year, month] = monthKey.split('-').map(Number);
+    const parts = monthKey.split('-');
+    const year = parseInt(parts[0]);
+    const month = parseInt(parts[1]);
     const monthName = MONTH_NAMES[month];
 
     // Find dates in this month
-    const monthDates = globalData.dates.filter(d =>
-        d.date && d.date.getMonth() === month && d.date.getFullYear() === year
-    );
+    const monthDates = globalData.dates.filter(function (d) {
+        return d.date && d.date.getMonth() === month && d.date.getFullYear() === year;
+    });
 
     if (monthDates.length === 0) {
         document.getElementById('reportTable').innerHTML = '<p style="color:#94a3b8;padding:20px;">No hay datos para este mes.</p>';
@@ -669,14 +639,14 @@ function generateReport() {
     }
 
     // Build table
-    let html = '<table class="report-table"><thead><tr>';
+    var html = '<table class="report-table"><thead><tr>';
     html += '<th class="driver-col">Conductor</th>';
 
     for (const d of monthDates) {
         const day = d.date.getDate();
         const dow = d.date.getDay();
         const isWeekend = dow === 0 || dow === 6;
-        html += `<th class="${isWeekend ? 'weekend' : ''}">${day}</th>`;
+        html += '<th class="' + (isWeekend ? 'weekend' : '') + '">' + day + '</th>';
     }
     html += '<th>Trabajados</th><th>Descanso</th><th>Parado</th><th>%</th>';
     html += '</tr></thead><tbody>';
@@ -686,7 +656,7 @@ function generateReport() {
 
     for (const driver of globalData.drivers) {
         html += '<tr>';
-        html += `<td class="driver-name-cell">${driver.name}</td>`;
+        html += '<td class="driver-name-cell">' + driver.name + '</td>';
 
         let worked = 0, rest = 0, stopped = 0;
         const opsThisMonth = {};
@@ -699,18 +669,18 @@ function generateReport() {
 
             if (rec && rec.rawValue) {
                 const code = rec.code;
-                let cellClass = isWeekend ? 'weekend' : '';
-                let cellStyle = '';
+                var cellClass = isWeekend ? 'weekend' : '';
+                var cellStyle = '';
 
                 if (code) {
                     const g = code.group;
                     const prefix = rec.rawValue.toUpperCase().replace(/[0-9/]/g, '');
-                    cellClass += ` code-cell code-${prefix || g[0]}`;
-                    cellStyle = `background:${code.color}; color:white;`;
+                    cellClass += ' code-cell code-' + (prefix || g[0]);
+                    cellStyle = 'background:' + code.color + '; color:white;';
 
-                    if (['DESCANSO'].includes(g)) { rest++; cellStyle = 'background:rgba(55,65,81,0.3); color:#9ca3af;'; }
-                    else if (['PARADO'].includes(g)) { stopped++; cellStyle = 'background:rgba(251,191,36,0.15); color:#fbbf24;'; }
-                    else if (!['MEDIA', 'FERIADO'].includes(g)) {
+                    if (g === 'DESCANSO') { rest++; cellStyle = 'background:rgba(55,65,81,0.3); color:#9ca3af;'; }
+                    else if (g === 'PARADO') { stopped++; cellStyle = 'background:rgba(251,191,36,0.15); color:#fbbf24;'; }
+                    else if (g !== 'MEDIA' && g !== 'FERIADO') {
                         worked++;
                         opsThisMonth[g] = (opsThisMonth[g] || 0) + 1;
                     }
@@ -718,27 +688,27 @@ function generateReport() {
                     cellClass += ' code-comment';
                 }
 
-                html += `<td class="${cellClass}" style="${cellStyle}" title="${rec.rawValue}">${rec.rawValue}</td>`;
+                html += '<td class="' + cellClass + '" style="' + cellStyle + '" title="' + rec.rawValue + '">' + rec.rawValue + '</td>';
             } else {
-                html += `<td class="${isWeekend ? 'weekend' : ''}"></td>`;
+                html += '<td class="' + (isWeekend ? 'weekend' : '') + '"></td>';
             }
         }
 
         const total = worked + rest + stopped;
         const pct = total > 0 ? Math.round(worked / total * 100) : 0;
 
-        html += `<td style="font-weight:800;color:#10b981">${worked}</td>`;
-        html += `<td style="color:#6b7280">${rest}</td>`;
-        html += `<td style="color:#fbbf24">${stopped}</td>`;
-        html += `<td style="font-weight:800;color:#00d4ff">${pct}%</td>`;
+        html += '<td style="font-weight:800;color:#10b981">' + worked + '</td>';
+        html += '<td style="color:#6b7280">' + rest + '</td>';
+        html += '<td style="color:#fbbf24">' + stopped + '</td>';
+        html += '<td style="font-weight:800;color:#00d4ff">' + pct + '%</td>';
         html += '</tr>';
 
         // Build summary text
         const opsText = Object.entries(opsThisMonth)
-            .map(([op, count]) => `${count} días en ${op}`)
+            .map(function (entry) { return entry[1] + ' días en ' + entry[0]; })
             .join(', ');
         if (opsText) {
-            summaryParts.push(`<strong>${driver.name}</strong>: ${opsText} (${pct}% actividad)`);
+            summaryParts.push('<strong>' + driver.name + '</strong>: ' + opsText + ' (' + pct + '% actividad)');
         }
     }
 
@@ -747,10 +717,9 @@ function generateReport() {
 
     // Summary text
     const summaryEl = document.getElementById('reportSummary');
-    summaryEl.innerHTML = `
-    <p>📊 <strong>Resumen de ${monthName} ${year}:</strong></p>
-    <p style="margin-top:8px;">${summaryParts.join('<br>')}</p>
-  `;
+    summaryEl.innerHTML =
+        '<p>📊 <strong>Resumen de ' + monthName + ' ' + year + ':</strong></p>' +
+        '<p style="margin-top:8px;">' + summaryParts.join('<br>') + '</p>';
     summaryEl.style.display = 'block';
 }
 
@@ -767,7 +736,9 @@ function renderCalendar() {
     }
 
     const driver = globalData.drivers[parseInt(driverIdx)];
-    const [year, month] = monthKey.split('-').map(Number);
+    const calParts = monthKey.split('-');
+    const year = parseInt(calParts[0]);
+    const month = parseInt(calParts[1]);
 
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -776,11 +747,11 @@ function renderCalendar() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    let html = '';
+    var html = '';
     // Day headers
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     for (const dn of dayNames) {
-        html += `<div class="day-header">${dn}</div>`;
+        html += '<div class="day-header">' + dn + '</div>';
     }
 
     // Empty cells before first day
@@ -794,22 +765,22 @@ function renderCalendar() {
         const isToday = cellDate.getTime() === today.getTime();
 
         // Find record for this date
-        let dayContent = '';
+        var dayContent = '';
         for (const rec of driver.records) {
             if (rec.date && rec.date.getDate() === d && rec.date.getMonth() === month && rec.date.getFullYear() === year) {
                 if (rec.code) {
-                    dayContent += `<div class="day-code" style="background:${rec.code.color};color:white;">${rec.rawValue}</div>`;
+                    dayContent += '<div class="day-code" style="background:' + rec.code.color + ';color:white;">' + rec.rawValue + '</div>';
                 } else if (rec.rawValue) {
-                    dayContent += `<div class="day-code" style="background:rgba(255,255,255,0.1);color:#94a3b8;font-size:9px;">${rec.rawValue}</div>`;
+                    dayContent += '<div class="day-code" style="background:rgba(255,255,255,0.1);color:#94a3b8;font-size:9px;">' + rec.rawValue + '</div>';
                 }
                 break;
             }
         }
 
-        html += `<div class="day-cell ${isToday ? 'today' : ''}">
-      <div class="day-number">${d}</div>
-      ${dayContent}
-    </div>`;
+        html += '<div class="day-cell ' + (isToday ? 'today' : '') + '">' +
+            '<div class="day-number">' + d + '</div>' +
+            dayContent +
+            '</div>';
     }
 
     document.getElementById('calendarGrid').innerHTML = html;
@@ -820,20 +791,20 @@ function renderCalendar() {
 // =============================================
 function showPage(pageId) {
     // Hide all pages
-    document.querySelectorAll('.section-page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.section-page').forEach(function (p) { p.classList.remove('active'); });
     // Show target
     document.getElementById('page-' + pageId).classList.add('active');
     // Update nav
-    document.querySelectorAll('.sidebar-nav a').forEach(a => {
-        a.classList.toggle('active', a.dataset.page === pageId);
+    document.querySelectorAll('.sidebar-nav a').forEach(function (a) {
+        if (a.dataset.page === pageId) { a.classList.add('active'); } else { a.classList.remove('active'); }
     });
 }
 
 function populateSelectors() {
     // Driver selectors
-    const driverOptions = globalData.drivers.map((d, i) =>
-        `<option value="${i}">${d.name}</option>`
-    ).join('');
+    const driverOptions = globalData.drivers.map(function (d, i) {
+        return '<option value="' + i + '">' + d.name + '</option>';
+    }).join('');
 
     const selDriver = document.getElementById('selectDriver');
     selDriver.innerHTML = '<option value="">— Seleccionar conductor —</option>' + driverOptions;
@@ -842,9 +813,11 @@ function populateSelectors() {
     calDriver.innerHTML = '<option value="">— Seleccionar conductor —</option>' + driverOptions;
 
     // Month selectors
-    const monthOptions = globalData.months.map(m => {
-        const [y, mo] = m.split('-').map(Number);
-        return `<option value="${m}">${MONTH_NAMES[mo]} ${y}</option>`;
+    const monthOptions = globalData.months.map(function (m) {
+        var parts = m.split('-');
+        var y = parseInt(parts[0]);
+        var mo = parseInt(parts[1]);
+        return '<option value="' + m + '">' + MONTH_NAMES[mo] + ' ' + y + '</option>';
     }).join('');
 
     const selMonth = document.getElementById('selectMonth');
